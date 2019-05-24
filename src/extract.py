@@ -35,7 +35,9 @@ def extract_image(im,
     filter_connectivity=20,
     # cropping params
     crop_threshold=0.975,
-    # internal heuristic params
+    # returned values params
+    padding=0,
+    return_coords=False,
     plot=False):
   '''
   Main method for clipping images from a page scan.
@@ -80,6 +82,12 @@ def extract_image(im,
     white pixels have value 1, and all filtering operations in this workflow
     attempt to set non-pictoral pixels to white, one usually wants this value
     to be close to but less than 1.
+  padding : int {>0}
+    Determines how many pixels of padding to add on each side of
+    the cropped picture.
+  return_coords : bool
+    If True, returns bounding box coordinates with the order
+    (y_min, y_max, x_min, x_max) instead of the cropped image.
   plot : bool
     Whether to show plots as an image passes through the pipeline.
   '''
@@ -87,26 +95,27 @@ def extract_image(im,
   # load the image and resize to expedite processing if image is large
   im = load_image(im)
   _im = deepcopy(im)
-  if np.any(np.array(im.shape) > 1000):
-    im = skimage.transform.rescale(im, 0.05)
+
+  # if the input image is binarized, only remove one color
+  if len(im.shape) == 2: n_colors_to_remove = 1
 
   # remove background page color
   im = remove_dominant_colors(im,
     use_mask=use_mask,
     mask_size=mask_size,
     n_colors_to_remove=n_colors_to_remove)
-  if plot: plot_img(im, 'Colors Removed')
+  if plot: plot_image(im, 'Colors Removed')
 
   # remove text letters and small components
   if filter_min_size: im = filter_img(im,
     min_size=filter_min_size,
     threshold=filter_threshold,
     connectivity=filter_connectivity)
-  if plot: plot_img(im, 'Filter Applied')
+  if plot: plot_image(im, 'Filter Applied')
 
   # apply a gaussian filter to smooth out values
   im = gaussian_filter(im, sigma=blur_sigma)
-  if plot: plot_img(im, 'Gaussian Blur Applied')
+  if plot: plot_image(im, 'Gaussian Blur Applied')
 
   # aggregate the pixel values for each axis
   y = np.mean(im, axis=1)
@@ -121,12 +130,21 @@ def extract_image(im,
   y0, y1 = get_longest_match(y, threshold=crop_threshold, op=operator.lt)
   x0, x1 = get_longest_match(x, threshold=crop_threshold, op=operator.lt)
 
+  # apply the padding to the returned coordinates
+  padding = int(padding) # disallow decimal pads
+  y0 = max(0, y0-padding)
+  y1 = min(im.shape[0], y1+padding)
+  x0 = max(0, x0-padding)
+  x1 = min(im.shape[1], x1+padding)
+
+  if return_coords: return [y0, y1, x0, x1]
+
   # crop out the image content and warn users if relevant
   cropped = _im[y0:y1, x0:x1]
-  if _im.shape != im.shape:
-    print(' ! todo - handle resize')
-  if cropped.size < _im.size * 0.05:
-    print(' ! no image found')
+  if _im.shape[:2] != im.shape[:2]:
+    print('TODO - handle resize')
+  if cropped.size < _im.size * 0.001:
+    print('No image was found')
     return _im
 
   # return the cropped pictoral content
@@ -191,12 +209,12 @@ def remove_dominant_colors(im,
   arr = arr[np.where(arr >= 0)] # remove pixels that fall outside of mask
   pixel_counts = Counter(arr) # count instances of each pixel
   no_paper = np.around(img_orig, 1) # create a copy of the image we can mutate to white out the paper
-  for i in range(2):
+  for i in range(n_colors_to_remove):
     paper_color = pixel_counts.most_common(n_colors_to_remove)[i][0]
     vals = np.where(no_paper == paper_color) # find quantized pixels that == quantized gaussian mean
     if len(vals) > 2: vals = vals[:2]
     xs, ys = vals
-    if len(no_paper.shape) == 2: no_paper[xs, ys, :] = 1
+    if len(no_paper.shape) == 2: no_paper[xs, ys] = 1
     elif len(no_paper.shape) == 3: no_paper[xs, ys, :] = 1
     else: raise Exception('Input image size not recognized')
 
@@ -329,7 +347,7 @@ def crop_with_color_deltas(im):
   return cropped
 
 
-def get_longest_match(arr, threshold=0.975, op=operator.gt):
+def get_longest_match(arr, threshold=0.985, op=operator.gt):
   '''
   Find the longest contiguous region of an input region that is greater than
   a specified threshold if op == operator.gt, or less than that threshold
@@ -367,8 +385,8 @@ def get_longest_match(arr, threshold=0.975, op=operator.gt):
   if streak and (len(streak) > len(max_streak)):
     max_streak = streak
   if not max_streak:
-    print(' no max streak')
-    return np.array([])
+    print('No longest match was found for axis')
+    return np.array([0,0])
   return np.array([max_streak[0], max_streak[-1]])
 
 
@@ -413,7 +431,7 @@ def scale_1d_array(arr):
 # Plotting
 ##
 
-def plot_img(im, title=''):
+def plot_image(im, title=''):
   '''
   Simple helper to plot an image with an optional title attribute.
 
@@ -425,7 +443,7 @@ def plot_img(im, title=''):
   title : str
     The title to add to the image (if desired).
   '''
-  plt.imshow(load_image(im))
+  plt.imshow(load_image(im), cmap = 'gray')
   plt.title(title)
   plt.show()
 
