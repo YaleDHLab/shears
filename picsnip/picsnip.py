@@ -12,6 +12,7 @@ import numpy as np
 import operator
 import skimage
 import glob2
+import six
 import os
 import warnings
 
@@ -428,9 +429,15 @@ def save_image(*args):
     path = 'cropped.jpg'
   elif len(args) == 2:
     im, path = args
-  # persist the image
+  # handle case where user passes e.g. float as filename
+  if not isinstance(path, six.string_types):
+    try:
+      path = str(path)
+    except:
+      raise Exception('Please provide a string-like filename')
+  # persist the image - cmap is ignored for RGB(A) data
   im = load_image(im)
-  plt.imsave(path, im)
+  plt.imsave(path, im, cmap='gray')
 
 
 def scale_1d_array(arr):

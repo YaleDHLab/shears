@@ -16,6 +16,7 @@ setup (
     'scikit-image>=0.15.0',
     'scikit-learn>=0.20.3',
     'scipy>=1.2.1',
+    'six>=1.11.0',
   ],
 )
 
