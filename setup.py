@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup (
   name='picsnip',
-  version='0.0.1',
+  version='0.0.2',
   packages=['picsnip'],
   keywords = ['machine-vision', 'computer-vision', 'image-processing', 'data-collection'],
   description='Extract illustrations from book page scans',
