@@ -3,6 +3,7 @@
 *.DS_Store
 *.pyc
 *.egg-info
+*.html
 pycache
 __cache__
 __pycache__
@@ -10,3 +11,4 @@ __pycache__
 build
 dist
 examples/*.jpg
+examples/*.png
