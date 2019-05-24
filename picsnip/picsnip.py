@@ -5,7 +5,6 @@ from skimage.measure import label, regionprops
 from multiprocessing import Pool
 from skimage.color import rgb2gray
 from skimage import segmentation, morphology
-from scipy.misc import imsave
 from collections import Counter
 from copy import deepcopy
 import numpy as np

@@ -12,4 +12,4 @@ from .picsnip import clip, \
   plot_image, \
   plot_1d
 
-__version__ = '0.0.2'
+__version__ = '0.0.3'
