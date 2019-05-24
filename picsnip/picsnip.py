@@ -434,6 +434,10 @@ def save_image(*args):
       path = str(path)
     except:
       raise Exception('Please provide a string-like filename')
+  # handle case where output path contains dirs that don't exist
+  out_dir, out_file = os.path.split(os.path.abspath(path))
+  if not os.path.exists(out_dir):
+    os.makedirs(out_dir)
   # persist the image - cmap is ignored for RGB(A) data
   im = load_image(im)
   plt.imsave(path, im, cmap='gray')
