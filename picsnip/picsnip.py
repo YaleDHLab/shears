@@ -22,7 +22,7 @@ warnings.filterwarnings('ignore')
 # Main
 ##
 
-def extract_image(im,
+def clip(im,
     # color removal params
     n_colors_to_remove=2,
     use_mask=True,
@@ -411,6 +411,28 @@ def load_image(im):
   return plt.imread(im)
 
 
+def save_image(*args):
+  '''
+  Save an image to disk.
+
+  Parameters
+  ----------
+  im : str or numpy.ndarray
+    An image to process, identified either by the path to an image file
+    or a numpy array.
+  path : str
+    The location on disk where the file should be saved
+  '''
+  if len(args) == 1:
+    im = args[0]
+    path = 'cropped.jpg'
+  elif len(args) == 2:
+    im, path = args
+  # persist the image
+  im = load_image(im)
+  plt.imsave(path, im)
+
+
 def scale_1d_array(arr):
   '''
   Given a one dimensional numpy array, scale that array 0:1.
@@ -463,3 +485,10 @@ def plot_1d(arr, title=''):
   plt.plot(arr)
   plt.title(title)
   plt.show()
+
+
+##
+# Aliases
+##
+
+show_image = plot_image
