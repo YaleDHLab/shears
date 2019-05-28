@@ -92,7 +92,7 @@ def clip(im,
     Whether to show plots as an image passes through the pipeline.
   '''
 
-  # load the image and resize to expedite processing if image is large
+  # load the image
   im = load_image(im)
   _im = deepcopy(im)
 
@@ -254,99 +254,6 @@ def filter_img(im, min_size=250, connectivity=20, threshold=0.7):
   return mask
 
 
-##
-# Color Analysis
-##
-
-def can_crop_by_color_channels(im, threshold=0.001, log=False):
-  '''
-  Determine whether an image can be cropped using only the deltas between
-  the r,g,b color channels in the input image. This approach is useful
-  if the input image contains grayscale pictoral content on grayscale
-  backgrounds or grayscale pictoral content on colored backgrounds.
-
-  Parameters
-  ----------
-  im : str or numpy.ndarray
-    An image to process, identified either by the path to an image file
-    or a numpy array.
-  threshold : float
-    The minimum standard deviation to use as a criterion that the pictoral
-    content in the input image can be cropped by virtue of color channel
-    information only. Lower thresholds require a stronger demarcation between
-    rgb foreground and grayscale background or vice-versa.
-  log : bool
-    Whether to log the means and standard deviations of the Gaussian Mixture
-    Model to stdout.
-  '''
-  im = skimage.transform.rescale(im, 0.05)
-  diffs = im_to_color_diffs(im)
-  # fit a two component mixed gaussian and measure the sds
-  clf = GaussianMixture(n_components=2)
-  results = clf.fit(np.expand_dims(diffs.flatten(), axis=-1))
-  means = results.means_.flatten()
-  stds = results.covariances_.flatten()
-  if log: print('means:', means, ' ---  stds:', stds)
-  # if the first standard deviation is sufficiently low, we can crop by color
-  # channels, else there's too much color confusion to use this technique
-  return stds[0] < threshold
-
-
-def im_to_color_diffs(im):
-  '''
-  Given an image with shape (height, width, color), return a df with the
-  same shape indicating the aggregate color channel deltas for each pixel.
-  This is useful for identifying regions of paper that contain grayscale
-  and color data.
-
-  Parameters
-  ----------
-  im : str or numpy.ndarray
-    An image to process, identified either by the path to an image file
-    or a numpy array.
-  '''
-  if len(im.shape) < 3:
-    print('Warning: images without color channels have no color diffs')
-    return np.zeros(im.shape[0], im.shape[1], 3)
-  d = np.diff(im, axis=-1) # find color channel diffs
-  s = np.sum(d, axis=-1) # sum color channel diffs by pixel
-  s = (a - np.min(a)) / (np.max(a)-np.min(a)) # center values 0:1
-  return 1-s # invert axis to make large deltas large
-
-
-def crop_with_color_deltas(im):
-  '''
-  Given an image with grayscale pictoral content and solid color paper,
-  crop out the grayscale pictoral content and return that image array.
-
-  Parameters
-  ----------
-  im : str or numpy.ndarray
-    An image to process, identified either by the path to an image file
-    or a numpy array.
-  '''
-  resized = skimage.transform.rescale(im, 0.05) # resize for faster model fit
-  diffs = im_to_color_diffs(resized)
-
-  m = np.mean(diffs, axis=-1) # mean color channel deltas; shape = im.height, im.width
-  x_diffs = scale_1d_array( np.sum(m, axis=0) )
-  y_diffs = scale_1d_array( np.sum(m, axis=1) )
-
-  clf = GaussianMixture(n_components=2) # two dominant values in color channel diffs
-  results = clf.fit(np.expand_dims(m.flatten(), axis=-1))
-  means = results.means_
-  threshold = np.sum(means)/2
-
-  c0 = crop_axis(x_diffs, threshold=threshold)
-  c1 = crop_axis(y_diffs, threshold=threshold)
-
-  s0 = np.multiply( np.divide(c0, resized.shape[:2]), im.shape[:2]) # scale
-  s1 = np.multiply( np.divide(c1, resized.shape[:2]), im.shape[:2])
-
-  cropped = im[ int(s1[0]) : int(s1[1]), int(s0[0]) : int(s0[1]) ] # crop
-  return cropped
-
-
 def get_longest_match(arr, threshold=0.985, op=operator.gt):
   '''
   Find the longest contiguous region of an input region that is greater than
@@ -386,9 +293,86 @@ def get_longest_match(arr, threshold=0.985, op=operator.gt):
     max_streak = streak
   if not max_streak:
     print('No longest match was found for axis')
-    return np.array([0,0])
+    return arr
   return np.array([max_streak[0], max_streak[-1]])
 
+
+def crop_with_color_diffs(im, plot=False):
+  '''
+  Given an image with grayscale pictoral content and solid color paper,
+  crop out the grayscale pictoral content and return that image array.
+
+  Parameters
+  ----------
+  im : str or numpy.ndarray
+    An image to process, identified either by the path to an image file
+    or a numpy array.
+  plot : bool
+    Whether to plot the resulting diffs array. This can be useful to
+    visually inspect the separation between bw and color regions of
+    an image
+  '''
+  im = load_image(im)
+  diffs = im_to_color_diffs(im, plot=plot)
+
+  # find the color diffs along two axes
+  y_sums = np.sum( np.sum(diffs, axis=1), axis=-1) / (diffs.shape[1] * 255)
+  x_sums = np.sum( np.sum(diffs, axis=0), axis=-1) / (diffs.shape[0] * 255)
+
+  # find the midpoint that separates the color and bw sections of each axis
+  # plotting the axis_sums shows that they separate out the image from te background nicely.
+  # model the axis_sums distribution as a mixture of two gaussians
+  # the two means will represent the diffs values for the image and paper portions of the image
+  clf = GaussianMixture(n_components=2)
+  y_means = clf.fit(np.expand_dims(y_sums, -1)).means_
+  x_means = clf.fit(np.expand_dims(x_sums, -1)).means_
+
+  # use midpoints of means along each axis to divide color from bw regions
+  y_midpoint = np.mean(y_means)
+  x_midpoint = np.mean(x_means)
+
+  # find the region of each axis that separates bw from color
+  y0, y1 = get_longest_match(y_sums, threshold=y_midpoint, op=operator.lt)
+  x0, x1 = get_longest_match(x_sums, threshold=x_midpoint, op=operator.lt)
+
+  # crop out the image
+  return im[y0:y1, x0:x1]
+
+
+def im_to_color_diffs(im, plot=False):
+  '''
+  Given an image with shape (height, width, color), return a df with the
+  same shape indicating the aggregate color channel deltas for each pixel.
+  This is useful for identifying regions of paper that contain grayscale
+  and color data.
+
+  Parameters
+  ----------
+  im : str or numpy.ndarray
+    An image to process, identified either by the path to an image file
+    or a numpy array.
+  plot : bool
+    Whether to plot the resulting diffs array. This can be useful to
+    visually inspect the separation between bw and color regions of
+    an image
+  '''
+  im = load_image(im)
+  if len(im.shape) < 3:
+    print('Warning: images without color channels have no color diffs')
+    diffs = np.zeros(im.shape[0], im.shape[1], 3)
+
+  # find the differences between the color channels in each pixel
+  else:
+    diffs = np.zeros(im.shape)
+    for y_idx, y in enumerate(im):
+      for x_idx, x in enumerate(y):
+        diffs[y_idx][x_idx] = (x[0] - x[1]) + (x[1] - x[2]) + (x[0] - x[2])
+
+  # plot the pixel color diffs if requested
+  if plot:
+    plot_image(np.sum(diffs, axis=2), colorbar=True)
+
+  return diffs
 
 ##
 # Helpers
@@ -396,9 +380,7 @@ def get_longest_match(arr, threshold=0.985, op=operator.gt):
 
 def load_image(im):
   '''
-  Return a numpy array containing the raster data from an image. If the
-  calling agent passes a numpy array, create a deepcopy to avoid array
-  mutations.
+  Return a numpy array containing the raster data from an image.
 
   Parameters
   ----------
@@ -407,7 +389,7 @@ def load_image(im):
     or a numpy array.
   '''
   if isinstance(im, np.ndarray):
-    return deepcopy(im)
+    return im
   return plt.imread(im)
 
 
@@ -463,7 +445,7 @@ def scale_1d_array(arr):
 # Plotting
 ##
 
-def plot_image(im, title=''):
+def plot_image(im, title='', colorbar=False):
   '''
   Simple helper to plot an image with an optional title attribute.
 
@@ -474,9 +456,12 @@ def plot_image(im, title=''):
     or a numpy array.
   title : str
     The title to add to the image (if desired).
+  colorbar : bool
+    Whether to show a colorbar for the image.
   '''
   plt.imshow(load_image(im), cmap = 'gray')
   plt.title(title)
+  if colorbar: plt.colorbar()
   plt.show()
 
 
