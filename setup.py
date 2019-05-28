@@ -1,12 +1,12 @@
 from setuptools import setup
 
 setup (
-  name='picsnip',
-  version='0.0.4',
-  packages=['picsnip'],
+  name='shears',
+  version='0.0.1',
+  packages=['shears'],
   keywords = ['machine-vision', 'computer-vision', 'image-processing', 'data-collection'],
   description='Extract illustrations from book page scans',
-  url='https://github.com/yaledhlab/picsnip',
+  url='https://github.com/yaledhlab/shears',
   author='Douglas Duhaime',
   author_email='douglas.duhaime@gmail.com',
   license='MIT',
@@ -19,4 +19,3 @@ setup (
     'six>=1.11.0',
   ],
 )
-

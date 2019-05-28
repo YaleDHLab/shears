@@ -1,5 +1,5 @@
 from __future__ import absolute_import
-from .picsnip import clip, \
+from .shears import clip, \
   remove_dominant_colors, \
   filter_img, \
   im_to_color_diffs, \
@@ -12,4 +12,4 @@ from .picsnip import clip, \
   show_image, \
   plot_1d
 
-__version__ = '0.0.4'
+__version__ = '0.0.1'
