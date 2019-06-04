@@ -1,5 +1,5 @@
 glob2>=0.6
-matplotlib>=3.0.3
+matplotlib>=2.0.0
 scikit-image>=0.15.0
 scikit-learn>=0.20.3
 scipy>=1.2.1
